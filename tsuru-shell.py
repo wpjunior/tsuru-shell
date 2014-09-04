@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 # Author: Wilson Júnior <wilsonpjunior@gmail.com>
 
 import sys
