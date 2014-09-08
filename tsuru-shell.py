@@ -15,10 +15,7 @@ from optparse import OptionParser
 def do_command(name, command_alias=None):
     def f(self, line):
         command = 'tsuru %s -a %s %s' % (name, self.application, line)
-
-        process = subprocess.Popen(
-            command, shell=True)
-        retcode = process.wait()
+        os.system(command)
 
     return f
 
@@ -172,8 +169,8 @@ class TsuruShell(cmd.Cmd):
     do_version = do_command('version')
     help_version = help_command('version')
 
-    do_info = do_command('info')
-    help_info = help_command('info')
+    do_info = do_command('app-info', 'info')
+    help_info = help_command('app-info', 'info')
 
     do_unit_add = do_command('unit-add', 'unit_add')
     help_unit_add = help_command('unit-add', 'unit_add')
