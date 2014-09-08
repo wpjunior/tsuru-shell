@@ -7,50 +7,9 @@ import sys
 import os
 import subprocess
 import re
+import readline
 
 from optparse import OptionParser
-
-
-class Historic(object):
-    MAX_LENGTH = 10
-
-    def __init__(self):
-        self.config_path = os.path.expanduser('~/.tsuru_shell_history')
-        self.commands = []
-
-        if os.path.exists(self.config_path):
-            self.read_config_path()
-
-    def read_config_path(self):
-        with open(self.config_path, 'rb') as f:
-            self.commands = f.read().split('\n')
-
-        self.current_pos = len(self.commands) - 1
-
-    def write_config_path(self):
-        with open(self.config_path, 'wb') as f:
-            f.write('\n'.join(self.commands))
-
-    def put(self, command):
-        self.commands.append(command)
-
-        if len(self.commands) > self.MAX_LENGTH:
-            self.commands.pop(0)
-
-        self.current_pos = len(self.commands) - 1
-        self.write_config_path()
-
-    def previous(self):
-        if self.current_pos > 0:
-            self.current_pos -= 1
-
-        return self.commands[self.current_pos]
-
-    def next(self):
-        if self.current_pos < len(self.commands) - 1:
-            self.current_pos += 1
-
-        return self.commands[self.current_pos]
 
 
 def do_command(name, command_alias=None):
@@ -60,7 +19,6 @@ def do_command(name, command_alias=None):
         process = subprocess.Popen(
             command, shell=True)
         retcode = process.wait()
-
 
     return f
 
@@ -110,14 +68,22 @@ class TsuruShell(cmd.Cmd):
 
     SHELL_MULTI_MODE = 'multi'
     SHELL_ONCE_MODE = 'once'
+    SHELL_MAX_HISTORY = 20
 
     def __init__(self, application, *args, **kwargs):
         super(TsuruShell, self).__init__(*args, **kwargs)
-        # self.historic = Historic()
         self.application = application
         self.counter = 1
         self.current_path = self.get_current_path()
 
+        self.history_dir = os.path.expanduser('~/.tsuru_shell/')
+        self.history_path = os.path.join(
+            self.history_dir, '%s.historic' % application)
+
+        if os.path.exists(self.history_path):
+            readline.read_history_file(self.history_path)
+
+        readline.set_history_length(self.SHELL_MAX_HISTORY)
         self.mode = TsuruShell.SHELL_ONCE_MODE
 
     def get_current_path(self):
@@ -167,6 +133,11 @@ class TsuruShell(cmd.Cmd):
 
     def postcmd(self, stop, line):
         self.counter += 1
+
+        if not os.path.exists(self.history_dir):
+            os.mkdir(self.history_dir)
+
+        readline.write_history_file(self.history_path)
 
     def help_cd(self):
         print("Usage: cd [PATH]")
