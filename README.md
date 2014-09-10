@@ -3,6 +3,10 @@ Tsuru Shell
 
 Mini shell for tsuru
 
+Dependencies
+------------
+* python3
+
 Instalation
 -----------
 ```
