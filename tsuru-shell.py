@@ -12,60 +12,74 @@ import readline
 from optparse import OptionParser
 
 
-def do_command(name, command_alias=None):
-    def f(self, line):
-        command = 'tsuru %s -a %s %s' % (name, self.application, line)
-        os.system(command)
+class TsuruShellType(type):
 
-    return f
+    def __new__(cls, name, bases, attrs):
+        proxy_aliases = attrs.get('proxy_aliases', {})
+
+        for command in attrs.get('proxy_commands', []):
+
+            if command in proxy_aliases:
+                command_alias = proxy_aliases[command]
+            elif '-' in command:
+                command_alias = command.replace('-', '_')
+            else:
+                command_alias = None
+
+            attrs['do_%s' % command_alias or command] = cls.do_command(
+                command, command_alias)
+            attrs['help_%s' % command_alias or command] = cls.help_command(
+                command, command_alias)
+
+        return type(name, bases, attrs)
+
+    def do_command(name, command_alias=None):
+        def f(self, line):
+            command = 'tsuru %s -a %s %s' % (name, self.application, line)
+            os.system(command)
+
+        return f
+
+    def help_command(name, command_alias=None):
+        def f(self):
+            process = subprocess.Popen(
+                'tsuru help %s' % name, shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE)
+
+            out, err = process.communicate()
+            out = out.decode("utf-8")
+            out = re.sub(r'tsuru version [0-9\\.]+', '', out)
+            out = out.replace('Usage: tsuru', 'Usage:')
+            out = out.replace('[--app appname]', '')
+            out = out.replace(
+                "If you don't provide the app name, tsuru will try to guess it.", '')
+            out = re.sub('[\n]{2,}', '\n\n', out)
+
+            if command_alias:
+                out = out.replace(name, command_alias)
+
+            sys.stdout.write(out.strip())
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+
+        return f
 
 
-def help_command(name, command_alias=None):
-    def f(self):
-        process = subprocess.Popen(
-            'tsuru help %s' % name, shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
+class TsuruShell(cmd.Cmd, metaclass=TsuruShellType):
 
-        out, err = process.communicate()
-        out = out.decode("utf-8")
-        out = re.sub(r'tsuru version [0-9\\.]+', '', out)
-        out = out.replace('Usage: tsuru', 'Usage:')
-        out = out.replace('[--app appname]', '')
-        out = out.replace(
-            "If you don't provide the app name, tsuru will try to guess it.", '')
-        out = re.sub('[\n]{2,}', '\n\n', out)
-
-        if command_alias:
-            out = out.replace(name, command_alias)
-
-        sys.stdout.write(out.strip())
-        sys.stdout.write('\n')
-        sys.stdout.flush()
-
-    return f
-
-
-def colorize(text, color):
-    """"
-    Black       0;30     Dark Gray     1;30
-    Blue        0;34     Light Blue    1;34
-    Green       0;32     Light Green   1;32
-    Cyan        0;36     Light Cyan    1;36
-    Red         0;31     Light Red     1;31
-    Purple      0;35     Light Purple  1;35
-    Brown       0;33     Yellow        1;33
-    Light Gray  0;37     White         1;37
-    """
-    return '\033[%sm%s\033[0m' % (color, text)
-
-
-class TsuruShell(cmd.Cmd):
     intro = 'Welcome to Tsuru shell\nif you have any question please type help'
 
     SHELL_MULTI_MODE = 'multi'
     SHELL_ONCE_MODE = 'once'
     SHELL_MAX_HISTORY = 20
+
+    proxy_commands = ('restart', 'start', 'stop', 'env-set', 'env-unset',
+                      'env-get', 'version', 'app-info')
+    proxy_aliases = {
+        'app-info': 'info',
+        'env-get': 'env'
+    }
 
     def __init__(self, application, *args, **kwargs):
         super(TsuruShell, self).__init__(*args, **kwargs)
@@ -145,45 +159,6 @@ class TsuruShell(cmd.Cmd):
     def reset_pwd(self):
         self.current_path = '/'
 
-    do_restart = do_command('restart')
-    help_restart = help_command('restart')
-
-    do_start = do_command('start')
-    help_start = help_command('start')
-
-    do_stop = do_command('stop')
-    help_stop = help_command('stop')
-
-    do_env_set = do_command('env-set', "env_set")
-    help_env_set = help_command('env-set', "env_set")
-
-    do_env_unset = do_command('env-unset', "env_unset")
-    help_env_unset = help_command('env-unset', "env_unset")
-
-    do_env = do_command('env-get', "env")
-    help_env = help_command('env-get', "env")
-
-    do_log = do_command('log')
-    help_log = help_command('log')
-
-    do_version = do_command('version')
-    help_version = help_command('version')
-
-    do_info = do_command('app-info', 'info')
-    help_info = help_command('app-info', 'info')
-
-    do_unit_add = do_command('unit-add', 'unit_add')
-    help_unit_add = help_command('unit-add', 'unit_add')
-
-    do_unit_remove = do_command('unit-remove', 'unit_remove')
-    help_unit_remove = help_command('unit-remove', 'unit_remove')
-
-    do_set_cname = do_command('set-cname', 'set_cname')
-    help_set_cname = help_command('set-cname', 'set_cname')
-
-    do_unset_cname = do_command('unset-cname', 'unset_cname')
-    help_unset_cname = help_command('unset-cname', 'unset_cname')
-
     def do_EOF(self, line):
         sys.stdout.write('\n')
         sys.exit(0)
@@ -191,13 +166,26 @@ class TsuruShell(cmd.Cmd):
     def default(self, line):
         self.do_run(line)
 
+    def colorize(self, text, color):
+        """"
+        Black       0;30     Dark Gray     1;30
+        Blue        0;34     Light Blue    1;34
+        Green       0;32     Light Green   1;32
+        Cyan        0;36     Light Cyan    1;36
+        Red         0;31     Light Red     1;31
+        Purple      0;35     Light Purple  1;35
+        Brown       0;33     Yellow        1;33
+        Light Gray  0;37     White         1;37
+        """
+        return '\033[%sm%s\033[0m' % (color, text)
+
     @property
     def prompt(self):
         return '%s:%s:%s (%s)$ ' % (
-            colorize(self.application, '1;34'),
-            colorize(self.mode, '0;31'),
-            colorize(self.current_path, '0;32'),
-            colorize(self.counter, '1;34'))
+            self.colorize(self.application, '1;34'),
+            self.colorize(self.mode, '0;31'),
+            self.colorize(self.current_path, '0;32'),
+            self.colorize(self.counter, '1;34'))
 
 if __name__ == '__main__':
     parser = OptionParser()
