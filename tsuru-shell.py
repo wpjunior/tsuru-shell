@@ -104,7 +104,7 @@ class TsuruShell(cmd.Cmd, metaclass=TsuruShellType):
                              stderr=subprocess.PIPE)
         out, err = p.communicate()
 
-        return out.strip().decode("utf-8")
+        return out.strip().decode("utf-8").splitlines()[0]
 
     def do_run(self, line):
         commands = ['tsuru', 'run', '-a', self.application]
